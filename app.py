@@ -495,7 +495,7 @@ if pending:
 
     with col2:
         cancel_send = st.button(
-            "取消本次预览 / Cancel",
+            "取消发送 / Cancel",
             use_container_width=True,
         )
 
