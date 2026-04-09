@@ -20,7 +20,7 @@ st.set_page_config(
     layout="centered",
 )
 
-MAX_FILE_SIZE_MB = 5
+MAX_FILE_SIZE_MB = 10
 MAX_TOTAL_FILES = 5
 MAX_DETAIL_FILES = 3
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
