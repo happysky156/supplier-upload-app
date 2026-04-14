@@ -12,11 +12,18 @@ import streamlit as st
 
 
 # =========================
+# 路径配置（本地 + Streamlit Cloud 共用）
+# =========================
+BASE_DIR = Path(__file__).parent
+LOGO_PATH = BASE_DIR / "assets" / "Zenith.png"
+
+
+# =========================
 # 基础配置
 # =========================
 st.set_page_config(
     page_title="供应商信息采集 / Supplier Information Upload",
-    page_icon="📸",
+    page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "📸",
     layout="centered",
 )
 
@@ -49,9 +56,11 @@ st.markdown(
         padding-top: 1rem;
         padding-bottom: 2rem;
     }
+
     h1, h2, h3 {
         line-height: 1.2;
     }
+
     div[data-testid="stFormSubmitButton"] button {
         width: 100%;
         min-height: 3rem;
@@ -59,6 +68,7 @@ st.markdown(
         font-weight: 700;
         border-radius: 12px;
     }
+
     div[data-testid="stButton"] button {
         width: 100%;
         min-height: 3rem;
@@ -66,11 +76,35 @@ st.markdown(
         font-weight: 700;
         border-radius: 12px;
     }
+
     .small-note {
         color: #666;
         font-size: 0.92rem;
         margin-top: -0.2rem;
         margin-bottom: 0.8rem;
+    }
+
+    .brand-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 0.2rem;
+    }
+
+    .brand-title-text h1 {
+        margin: 0;
+        line-height: 1.1;
+        font-size: 2.6rem;
+    }
+
+    @media (max-width: 768px) {
+        .brand-title-wrap {
+            gap: 10px;
+        }
+
+        .brand-title-text h1 {
+            font-size: 2rem;
+        }
     }
     </style>
     """,
@@ -300,12 +334,12 @@ def send_email(subject: str, body: str, attachments: list):
     msg["From"] = formataddr((sender_name, sender_email)) if sender_name else sender_email
     msg["To"] = ", ".join(recipients)
     msg["Subject"] = subject
-    msg["Message-ID"] = message_id  # ✅ 唯一追踪ID
+    msg["Message-ID"] = message_id
 
-    # ✅ 添加 DSN 回执请求头（部分服务器支持）
+    # DSN 回执请求头（部分服务器支持）
     msg["Disposition-Notification-To"] = sender_email
     msg["Return-Receipt-To"] = sender_email
-    msg["X-Priority"] = "3"  # 普通优先级
+    msg["X-Priority"] = "3"
 
     msg.set_content(body)
 
@@ -314,36 +348,39 @@ def send_email(subject: str, body: str, attachments: list):
             item["bytes"],
             maintype=item["maintype"],
             subtype=item["subtype"],
-            filename=item['filename'],
+            filename=item["filename"],
         )
 
-    # 🎯 智能风险提示预计算
+    # 智能风险提示预计算
     warnings = []
-    # 检查企业邮箱（非个人域名）
-    personal_domains = {"qq.com", "163.com", "126.com", "gmail.com", "outlook.com", "hotmail.com", "sina.com",
-                        "139.com"}
-    enterprise_recipients = [r for r in recipients if "@" in r and r.split("@")[1].lower() not in personal_domains]
+    personal_domains = {
+        "qq.com", "163.com", "126.com", "gmail.com",
+        "outlook.com", "hotmail.com", "sina.com", "139.com"
+    }
+    enterprise_recipients = [
+        r for r in recipients
+        if "@" in r and r.split("@")[1].lower() not in personal_domains
+    ]
     if enterprise_recipients:
         warnings.append(
-            f"⚠️ 检测到企业邮箱 ({', '.join(enterprise_recipients)})，可能有审计延迟，建议 10 分钟后未收到再排查")
+            f"⚠️ 检测到企业邮箱 ({', '.join(enterprise_recipients)})，可能有审计延迟，建议 10 分钟后未收到再排查"
+        )
 
     total_attach_size = sum(item.get("size_mb", 0) for item in attachments)
     if total_attach_size > 5:
         warnings.append(f"⚠️ 附件总计 {total_attach_size:.1f} MB，可能被收件方反垃圾系统延迟扫描")
 
-    send_result = {}  # 用于记录 send_message 返回结果
+    send_result = {}
 
     try:
         if cfg["use_ssl"]:
             with smtplib.SMTP_SSL(
-                    cfg["smtp_host"],
-                    cfg["smtp_port"],
-                    context=ssl.create_default_context(),
-                    timeout=30
+                cfg["smtp_host"],
+                cfg["smtp_port"],
+                context=ssl.create_default_context(),
+                timeout=30
             ) as server:
                 server.login(sender_email, cfg["sender_password"])
-                # ✅ 解析 send_message 返回的详细状态码
-                # 返回值: {失败邮箱: (错误码, 错误信息)}，空字典表示全部成功
                 send_result = server.send_message(msg, to_addrs=recipients)
 
         else:
@@ -352,11 +389,10 @@ def send_email(subject: str, body: str, attachments: list):
                 server.starttls(context=ssl.create_default_context())
                 server.ehlo()
                 server.login(sender_email, cfg["sender_password"])
-                # ✅ 解析 send_message 返回的详细状态码
                 send_result = server.send_message(msg, to_addrs=recipients)
 
     finally:
-        # ✅ 记录到本地日志文件（无论成功失败都记录）
+        # 记录到本地日志文件（无论成功失败都记录）
         try:
             log_entry = {
                 "timestamp": datetime.now().isoformat(),
@@ -372,7 +408,7 @@ def send_email(subject: str, body: str, attachments: list):
             with open(LOG_FILE, "a", encoding="utf-8") as f:
                 f.write(f"{log_entry}\n")
         except Exception:
-            pass  # 静默处理日志写入失败
+            pass
 
 
 def clear_pending_submission():
@@ -386,7 +422,26 @@ if st.session_state["flash_success"]:
     st.success(st.session_state["flash_success"])
     st.session_state["flash_success"] = ""
 
-st.title("📸 供应商信息采集 / Supplier Information Upload")
+col_logo, col_title = st.columns([1, 6])
+
+with col_logo:
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=100)
+    else:
+        st.markdown(
+            "<div style='font-size:48px; line-height:1; margin-top:8px;'>📸</div>",
+            unsafe_allow_html=True,
+        )
+
+with col_title:
+    st.markdown(
+        """
+        <div class="brand-title-text">
+            <h1>供应商信息采集 / Supplier Information Upload</h1>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 st.markdown(
     """
@@ -435,7 +490,7 @@ with st.form(key=f"upload_form_{nonce}", clear_on_submit=False):
         "备注（选填） / Notes (optional)",
         placeholder=(
             "补充信息，例如贵司产品类别、可加工材质、关键生产工艺、表面处理工艺等。\n"
-            "Add anynotes: product categories, materials, capability, surface treatments etc."
+            "Add any notes: product categories, materials, capability, surface treatments etc."
         ),
         height=130,
     )
@@ -495,7 +550,7 @@ if pending:
 
     with col2:
         cancel_send = st.button(
-            "取消发送 / Cancel",
+            "取消本次预览 / Cancel",
             use_container_width=True,
         )
 
@@ -553,7 +608,6 @@ else:
         '填写信息后，先点击"检查并预览"，确认无误后再发送。'
         'After filling in the form, click "Review before sending" first, then confirm and send.'
     )
-
 
 st.divider()
 st.caption(
